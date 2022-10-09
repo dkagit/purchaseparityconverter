@@ -3,13 +3,12 @@ package com.dkadev.purchaseparity.Services;
 import com.dkadev.purchaseparity.Json.CoreData;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.ComponentScan;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -18,17 +17,16 @@ import java.util.List;
 @Component
 public class ConversionService {
 
-    @Autowired
-    WebClient webClient;
+    private final WebClient webClient;
 
     private final String WEC_URI = "api.worldbank.org//v2//en//country//all//indicator//PA.NUS.PPP";
     private final String UNITED_STATES = "USA";
+    private final HashMap<String, List<CoreData>> PARITY_MAP;
 
-    public ConversionService(WebClient.Builder webClientBuilder) {
-        this.webClient = webClientBuilder.build();
+    public ConversionService(WebClient.Builder webClient) {
+        this.webClient = webClient.build();
+        PARITY_MAP = constructParityMap();
     }
-
-    private final HashMap<String, List<CoreData>> PARITY_MAP = constructParityMap();
 
     public HashMap<String, List<CoreData>> constructParityMap() {
         String data = getDataFromWEC().block();
@@ -71,8 +69,9 @@ public class ConversionService {
     }
 
     public String convert(String baseCountry, String targetCountry, BigDecimal salary,Integer year) {
-        BigDecimal baseCountryParityVal = getParityValue(baseCountry, year);
-        BigDecimal targetCountryParityValue = getParityValue(targetCountry, year);
+        BigDecimal baseCountryParityVal = getParityValue(baseCountry, year).setScale(3, RoundingMode.DOWN);
+        BigDecimal targetCountryParityValue = getParityValue(targetCountry, year).setScale(3, RoundingMode.DOWN);
+
         BigDecimal result = null;
 
         if(targetCountryParityValue!=null)
@@ -102,7 +101,7 @@ public class ConversionService {
     }
 
     private BigDecimal calculate(BigDecimal salary, BigDecimal baseCountryParityVal, BigDecimal targetCountryParityValue) {
-        return baseCountryParityVal.divide(targetCountryParityValue).multiply(salary);
+        return targetCountryParityValue.divide(baseCountryParityVal,3,RoundingMode.DOWN).multiply(salary);
     }
 
     private Mono<String> getDataFromWEC() {
